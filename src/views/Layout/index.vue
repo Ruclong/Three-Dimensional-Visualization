@@ -16,10 +16,5 @@ export default {
 }
 </script>
 <style>
-.title{
-  position: absolute;
-  left: 41.5%;
-  color: white;
-  z-index: 1000;
-}
+
 </style>

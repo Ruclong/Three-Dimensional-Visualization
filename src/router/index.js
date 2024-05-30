@@ -1,7 +1,6 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
 import Layout from '../views/Layout/index'
-import Home from '../views/Layout/home'
 import threeGeoVisual from '../views/Layout/threeGeoVisual'
 
 

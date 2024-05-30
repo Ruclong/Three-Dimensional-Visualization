@@ -1,10 +1,6 @@
 <template>
-  <div>
-    <div id="container"></div>
-    <div id="controls">
-      <label for="opacitySlider">透明度:</label>
-      <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1">
-    </div>
+  <div class="box">
+    <div id="container" class="container"></div>
     <!-- <Legend /> -->
   </div>
 </template>
@@ -12,7 +8,8 @@
 <script>
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';  // 导入字体加载器
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';//导入场景控制器
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js'; //导入gui面板
 import Papa from 'papaparse';
 import Legend from "./layerColor.vue";
 
@@ -23,15 +20,16 @@ export default {
   },
   data() {
     return {
-      container: null,
-      camera: null,
-      controls: null,
-      scene: null,
-      renderer: null,
-      mesh: null,
-      texture: null,
-      worldWidth: 40,
-      worldDepth: 40,
+      container: null,//容器
+      camera: null,  //摄像机
+      controls: null,//控制器
+      scene: null,  //场景
+      renderer: null, //渲染
+      mesh: null,     //材质
+      texture: null,  //纹理
+      worldWidth: 40, //世界网格
+      worldDepth: 40, //世界网格
+      drillHolesGroup: undefined, coalSeamGroup: undefined, terrainGroup: undefined, fillGeometrys: undefined,// gui组
       drillData: [
         [3851670.65, 39481878.68, 38.2, -490.77],
         [3853451.44, 39484801.52, 38.23, -780.03],
@@ -119,12 +117,13 @@ export default {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.container.appendChild(this.renderer.domElement);
 
-      // 创建场景
+      // 创建场景及背景颜色
       this.scene = new THREE.Scene();
-      // 设置场景背景颜色
       this.scene.background = new THREE.Color(0xbfd1e5);
 
       this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 50000);
+      this.camera.position.set(-15000, 5000, 0);
+      this.camera.lookAt(0, 0, 0); // 让摄像机朝向场景的中心点
 
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
@@ -135,83 +134,78 @@ export default {
       this.camera.position.set(-15000, 5000, 0);
       this.camera.lookAt(0, 0, 0); // 让摄像机朝向场景的中心点
 
-      let geometries = [];
-      /*
-      高程表面
-      */
-      let arryTop = []
-      for (let g = 0; g < this.drillData.length; g++) {
-        arryTop.push([this.drillData[g][0], this.drillData[g][2], this.drillData[g][1],])
-      }
-      const geometry = new THREE.PlaneGeometry(7800, 7800, this.worldWidth - 1, this.worldDepth - 1);
-      geometry.rotateX(-Math.PI / 2);
-      geometry.rotateY(Math.PI / 2); // 旋转以匹配地形
-      let vertices = geometry.attributes.position.array;
-      const normalizedData = this.normalizeDatas(arryTop);
-      geometry.attributes.position.needsUpdate = true; // 此行非常重要
-      geometries.push(this.cubicSplineInterpolation(normalizedData, vertices));
-      for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
-        vertices[j + 1] += 1250
-      }
-      // 创建地形网格材质，使用标准材质
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x00ff45,
-        wireframe: true,
-        opacity: 0.1
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.y = 20
-      mesh.position.x = 100
-      mesh.position.z = -100
-      this.scene.add(mesh);
+      // GUI面板
+      this.drillHolesGroup = new THREE.Group();
+      this.coalSeamGroup = new THREE.Group();
+      this.terrainGroup = new THREE.Group();
+      this.fillGeometrys = new THREE.Group();
 
-      /*
-        地下边界
-       */
-      let arryBottom = []
-      for (let g = 0; g < this.drillData.length; g++) {
-        arryBottom.push([this.drillData[g][0], this.drillData[g][3], this.drillData[g][1],])
-      }
-      // 创建一个新的平面几何体，尺寸与地形相同
-      const planeGeometry = new THREE.PlaneGeometry(7800, 7800, this.worldWidth - 1, this.worldDepth - 1);
-      planeGeometry.rotateX(-Math.PI / 2); // 旋转以匹配地形
-      planeGeometry.rotateY(Math.PI / 2); // 旋转以匹配地形
-      // 使用arry数组调整顶点位置
-      const vertices2 = planeGeometry.attributes.position.array;
-      const normalizedData2 = this.normalizeDatas(arryBottom);
-      geometries.push(this.cubicSplineInterpolation(normalizedData2, vertices2));
-      for (let i = 0, j = 0; i < vertices2.length; i++, j += 3) {
-        vertices2[j + 1] -= 3250
-      }
-      planeGeometry.attributes.position.needsUpdate = true;
-      // 创建材质
-
-      const planeMaterial = new THREE.MeshBasicMaterial({ color: 0x8b7d6b, wireframe: true, opacity: 0.1 });
-      // 创建网格并添加到场景
-      const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
-      planeMesh.position.z = -100;
-      planeMesh.position.x = 100;
-      planeMesh.position.y = -5;
-      this.scene.add(planeMesh);
-
-      // 填充体
-      // this.addFilling(geometries)
       // 添加钻孔
       this.addDrillHoles();
+      // 添加煤层
+      this.createCoalSeam();
+      // 创建地形
+      const geometries = this.createTopBottom(this.drillData, this.worldDepth, this.worldWidth)
+      // 添加填充
+      this.addFilling(geometries)
 
-      const opacitySlider = document.getElementById('opacitySlider');
+      this.scene.add(this.drillHolesGroup);
+      this.scene.add(this.coalSeamGroup);
+      this.scene.add(this.terrainGroup);
+      this.scene.add(this.fillGeometrys);
 
-      opacitySlider.addEventListener('input', function (event) {
-        const opacity = parseFloat(event.target.value);
-        material.opacity = opacity;
-        planeMaterial.opacity = opacity;
-      });
+
       // 监听鼠标移动事件
       this.container.addEventListener('pointermove', this.onPointerMove);
       // 监听窗口大小变化事件
       window.addEventListener('resize', this.onWindowResize);
-    },
 
+      this.createGUI();
+
+      this.animate();
+    },
+    createGUI() {
+      // 初始化GUI
+      const gui = new GUI();
+
+      const params = {
+        showDrillHoles: true,
+        showCoalSeam: true,
+        showTerrain: true,
+        showFillGeometry: true,
+        opacity: 1,
+
+      };
+
+      gui.add(params, 'showDrillHoles').name('显示钻孔').onChange((value) => {
+        this.drillHolesGroup.visible = value;
+      });
+
+      gui.add(params, 'showCoalSeam').name('显示煤层').onChange((value) => {
+        this.coalSeamGroup.visible = value;
+      });
+
+      // 添加显示地形的选项
+      const terrainFolder = gui.addFolder('地形控制');
+      terrainFolder.add(params, 'showTerrain').name('显示地形').onChange((value) => {
+        this.terrainGroup.visible = value;
+      });
+
+      terrainFolder.add(params, 'showFillGeometry').name('添加填充').onChange((value) => {
+        this.fillGeometrys.visible = value;
+      });
+
+      terrainFolder.open(); // 默认打开地形控制文件夹
+
+      gui.add(params, 'opacity', 0, 1).name('透明度').step(0.01).onChange((value) => {
+        this.fillGeometrys.children.forEach(child => {
+          child.material.opacity = value;
+        });
+        this.terrainGroup.children.forEach(child => {
+          child.material.opacity = value;
+        });
+      });
+    },
     normalizeDatas(data) {
       data.sort((a, b) => a[2] - b[2]);
       const xs = data.map(item => item[0]);
@@ -246,6 +240,70 @@ export default {
       });
     },
 
+    createTopBottom(drillData, worldDepth, worldWidth) {
+      let geometries = [];
+      /*
+      高程表面
+      */
+      let arryTop = []
+      for (let g = 0; g < drillData.length; g++) {
+        arryTop.push([drillData[g][0], drillData[g][2], drillData[g][1],])
+      }
+      const geometry = new THREE.PlaneGeometry(7800, 7800, worldWidth - 1, worldDepth - 1);
+      geometry.rotateX(-Math.PI / 2);
+      geometry.rotateY(Math.PI / 2); // 旋转以匹配地形
+      let vertices = geometry.attributes.position.array;
+      const normalizedData = this.normalizeDatas(arryTop);
+      geometry.attributes.position.needsUpdate = true; // 此行非常重要
+      geometries.push(this.cubicSplineInterpolation(normalizedData, vertices));
+      for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
+        vertices[j + 1] += 1250
+      }
+      // 创建地形网格材质，使用标准材质
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x00ff45,
+        wireframe: true,
+        opacity: 0.1
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.y = 20
+      mesh.position.x = 100
+      mesh.position.z = -100
+      this.terrainGroup.add(mesh)
+
+      /*
+      地下边界
+      */
+      let arryBottom = []
+      for (let g = 0; g < drillData.length; g++) {
+        arryBottom.push([drillData[g][0], drillData[g][3], drillData[g][1],])
+      }
+      // 创建一个新的平面几何体，尺寸与地形相同
+      const planeGeometry = new THREE.PlaneGeometry(7800, 7800, worldWidth - 1, worldDepth - 1);
+      planeGeometry.rotateX(-Math.PI / 2); // 旋转以匹配地形
+      planeGeometry.rotateY(Math.PI / 2); // 旋转以匹配地形
+      // 使用arry数组调整顶点位置
+      const vertices2 = planeGeometry.attributes.position.array;
+      const normalizedData2 = this.normalizeDatas(arryBottom);
+      geometries.push(this.cubicSplineInterpolation(normalizedData2, vertices2));
+      for (let i = 0, j = 0; i < vertices2.length; i++, j += 3) {
+        vertices2[j + 1] -= 3250
+      }
+      planeGeometry.attributes.position.needsUpdate = true;
+      // 创建材质
+
+      const planeMaterial = new THREE.MeshBasicMaterial({ color: 0x8b7d6b, wireframe: true, opacity: 0.1 });
+      // 创建网格并添加到场景
+      const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+      planeMesh.position.z = -100;
+      planeMesh.position.x = 100;
+      planeMesh.position.y = -5;
+      this.terrainGroup.add(planeMesh);
+
+      return geometries
+    },
+
+    //三次样条插值
     cubicSplineInterpolation(data, vertices) {
       const n = data.length;
       // 提取坐标点
@@ -338,20 +396,7 @@ export default {
         new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 1 }), // 黄色
         new THREE.MeshBasicMaterial({ color: 0x4caf50, transparent: true, opacity: 1 }), // 绿色
       ];
-      document.getElementById('opacitySlider').addEventListener('input', function (event) {
-        const newOpacity = event.target.value;
-        fillMaterial.forEach(material => {
-          material.opacity = newOpacity;
-        });
-      });
-      // document.getElementById('opacitySlider').addEventListener('input', function (event) {
-      //   const newOpacity = event.target.value;
-      //   fillMaterial.forEach(material => {
-      //     material.opacity = newOpacity;
-      //   });
-      // });
 
-      // 计算每个方块的尺寸，总长度为7800，按worldWidth分割
       const blockSize = 7800 / this.worldWidth;
 
       for (let g = 0; g < geometries.length - 1; g++) {
@@ -385,12 +430,108 @@ export default {
             const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial[g]);
             fillMesh.rotateY(Math.PI / 2); // 旋转以匹配地形
 
-            this.scene.add(fillMesh);
+            this.fillGeometrys.add(fillMesh);
           }
         }
       }
     },
 
+    // 创建煤层
+    async createCoalSeam() {
+      try {
+        const holeData = await this.fetchHoleData();
+        let verticeTop = [], verticeBottom = [];
+        const drillDataX = this.drillData.map(item => item[0]);
+        const drillDataY = this.drillData.map(item => item[1]);
+        const minX = Math.min(...drillDataX);
+        const maxX = Math.max(...drillDataX);
+        const minY = Math.min(...drillDataY);
+        const maxY = Math.max(...drillDataY);
+
+        // 存储顶点信息
+        for (let i = 0; i < holeData.length; i++) {
+
+          let normX = (holeData[i].X - minX) / (maxX - minX) * 7800 - 3900;
+          let normZ = (holeData[i].Y - minY) / (maxY - minY) * 7800 - 3900;
+          verticeTop.push(normZ * 0.9, -holeData[i].top, normX * 0.9);
+          verticeBottom.push(normZ * 0.9, -holeData[i].bottom, normX * 0.9);
+        }
+
+        // const topCurve = new THREE.CatmullRomCurve3(verticeTop);
+        // const bottomCurve = new THREE.CatmullRomCurve3(verticeBottom);
+
+        // const topPoints = topCurve.getPoints(50);
+        // const bottomPoints = bottomCurve.getPoints(50);
+
+        // const topVertices = [];
+        // const bottomVertices = [];
+
+        // topPoints.forEach(point => {
+        //     topVertices.push(point.x, point.y, point.z);
+        // });
+
+        // bottomPoints.forEach(point => {
+        //     bottomVertices.push(point.x, point.y, point.z);
+        // });
+
+        const indicesTop = this.TIN(verticeTop);
+        const indicesBottom = this.TIN(verticeBottom);
+
+        // 材质
+        const materials = {
+          top: new THREE.MeshLambertMaterial({
+            color: 0x000000,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 1,
+            // metalness: 0.6,
+            // roughness: 0.4,
+            wireframe: true
+          }),
+          bottom: new THREE.MeshLambertMaterial({
+            color: 0x0004850,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 1,
+            // metalness: 0.6,
+            // roughness: 0.4
+            // wireframe: true
+          })
+        };
+
+        //顶部
+        const geometryTop = new THREE.BufferGeometry();
+        geometryTop.setAttribute('position', new THREE.Float32BufferAttribute(verticeTop, 3));
+        geometryTop.setIndex(indicesTop);
+        geometryTop.computeVertexNormals();
+        const meshTop = new THREE.Mesh(geometryTop, materials.top);
+        this.coalSeamGroup.add(meshTop);
+
+        // 底部
+        const geometryBottom = new THREE.BufferGeometry();
+        geometryBottom.setAttribute('position', new THREE.Float32BufferAttribute(verticeBottom, 3));
+        geometryBottom.setIndex(indicesBottom);
+        geometryBottom.computeVertexNormals();
+        const meshBottom = new THREE.Mesh(geometryBottom, materials.bottom);
+        this.coalSeamGroup.add(meshBottom);
+
+        // 添加光照
+        const ambientLight = new THREE.AmbientLight(0x404040, 1); // 环境光
+        this.scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1); // 平行光
+        directionalLight.position.set(0, 100, 100).normalize();
+        this.scene.add(directionalLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 1, 1000); // 点光源
+        pointLight.position.set(0, 200, 200);
+        this.scene.add(pointLight);
+      } catch (error) {
+        console.error('绘制煤层出错:', error);
+      }
+    },
+
+    // 添加钻孔及字体
     async addDrillHoles() {
       // 从 CSV 文件获取数据
       const parsedData = await this.fetchHoleData();
@@ -472,7 +613,8 @@ export default {
       })
 
     },
-    
+
+    // 从 CSV 文件获取数据
     async fetchHoleData() {
       try {
         const response = await fetch('/csv/999.csv');
@@ -486,6 +628,59 @@ export default {
       } catch (error) {
         console.error("Error fetching hole data:", error);
       }
+    },
+
+    // 三角剖分计算绘制顺序 ,返回值 return indices
+    performDelaunay(vertices) {
+      //取x,z坐标，存到points2D中，算出绘制顺序，用以三角剖分
+      let points2D = [];
+      for (let i = 0; i < vertices.length; i += 3) {
+        points2D.push([vertices[i], vertices[i + 2]]);
+      }
+
+      const delaunay = d3.Delaunay.from(points2D);
+      const triangles = new Uint32Array(delaunay.triangles);
+      const indices = [];
+      for (let i = 0; i < triangles.length; i += 3) {
+        indices.push(triangles[i], triangles[i + 1], triangles[i + 2]);
+      }
+      return indices
+    },
+
+    // 将质心添加上去,返回值vertices
+    addCentroidsToVertices(vertices, centroids) {
+      centroids.forEach(centroid => {
+        vertices.push(centroid[0], centroid[1], centroid[2]);
+      });
+      return vertices;
+    },
+
+    // 计算质心,返回值return centroids
+    calculateCentroids(vertices, indices) {
+      let centroids = [];
+      for (let i = 0; i < indices.length; i += 3) {
+        const v1 = indices[i] * 3;
+        const v2 = indices[i + 1] * 3;
+        const v3 = indices[i + 2] * 3;
+        const centroid = [
+          (vertices[v1] + vertices[v2] + vertices[v3]) / 3,
+          (vertices[v1 + 1] + vertices[v2 + 1] + vertices[v3 + 1]) / 3,
+          (vertices[v1 + 2] + vertices[v2 + 2] + vertices[v3 + 2]) / 3,
+        ];
+        centroids.push(centroid);
+      }
+      return centroids;
+    },
+
+    // 执行多次三角剖分
+    TIN(verticeTop) {
+      for (let i = 0; i < 5; i++) {
+        let index = this.performDelaunay(verticeTop);
+        let centroids = this.calculateCentroids(verticeTop, index);
+        verticeTop = this.addCentroidsToVertices(verticeTop, centroids);
+      }
+      let indices = this.performDelaunay(verticeTop);
+      return indices
     },
 
     // 窗口大小变化事件处理函数
@@ -515,20 +710,55 @@ export default {
 </script>
 
 <style>
-#controls {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(255, 255, 255, 0.8);
-  padding: 10px;
-  border-radius: 5px;
+/* 在你的主 CSS 文件或 Vue 组件的样式部分添加以下样式 */
+.lil-gui {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  color: #ffffff;
 }
 
-#opacitySlider {
-  width: 200px;
+.lil-gui .controller {
+  margin-bottom: 8px;
 }
 
-body {
+.lil-gui input[type="range"] {
+  width: 100%;
+}
+
+.lil-gui .close-button {
+  display: none;
+  /* 隐藏关闭按钮，如果不需要 */
+}
+
+.lil-gui .folder {
+  margin-bottom: 16px;
+}
+
+.lil-gui .folder>.title {
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.lil-gui .folder>.title:after {
+  content: "▼";
+  float: right;
+  font-size: 10px;
+  color: #bbb;
+}
+
+.lil-gui .folder.closed>.title:after {
+  content: "►";
+}
+
+.lil-gui .folder.closed>.content {
+  display: none;
+}
+
+#container {
+  background-color: #bfd1e5;
+  /* 设置背景颜色 */
+  color: #61443e;
+  /* 设置文字颜色 */
   margin: 0;
   display: block;
 }
