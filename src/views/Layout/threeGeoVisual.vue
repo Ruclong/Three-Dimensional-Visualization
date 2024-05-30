@@ -5,14 +5,14 @@
       <label for="opacitySlider">透明度:</label>
       <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1">
     </div>
-    <Legend />
+    <!-- <Legend /> -->
   </div>
 </template>
 
 <script>
 import * as THREE from 'three';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';  // 导入字体加载器
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import Papa from 'papaparse';
 import Legend from "./layerColor.vue";
 
@@ -195,7 +195,7 @@ export default {
       this.scene.add(planeMesh);
 
       // 填充体
-      this.addFilling(geometries)
+      // this.addFilling(geometries)
       // 添加钻孔
       this.addDrillHoles();
 
@@ -390,106 +390,102 @@ export default {
         }
       }
     },
-    addDrillHoles() {
-      // 从 CSV 文件获取数据
-      fetch('/csv/coal_coal9.csv')
-        .then(response => response.text())
-        .then(data => {
-          // 使用 PapaParse 解析 CSV 数据
-          const parsedData = Papa.parse(data, {
-            header: true,
-            dynamicTyping: true
-          }).data;
-          const holeData = parsedData.reduce((acc, item) => {
-            let borehole = acc.find(b => b.id === item.id);
-            if (!borehole) {
-              borehole = {
-                id: item.id,
-                Y: item.Y,
-                X: item.X,
-                data: []
-              };
-              acc.push(borehole);
-            }
-            borehole.data.push({ name: item.name, top: item.top, bottom: item.bottom });
-            return acc;
-          }, []);
-          const colorMap = {
-            // "11煤": 0x1C1C1C, // 深灰色
-            // "13下煤": 0x2E2E2E, // 昏暗灰色
-            // "13煤": 0x3F3F3F, // 暗石板灰
-            // "14煤": 0x505050, // 灰色
-            // "15煤": 0x616161, // 石板灰
-            // "17煤": 0x727272, // 浅石板灰
-            // "18煤": 0x838383, // 深灰色
-            // "21煤": 0x949494, // 银色
-            // "22煤": 0xA5A5A5, // 浅灰色
-            // "6煤": 0xB6B6B6, // 长春花色
-            // "7煤": 0xC7C7C7, // 浅灰色
-            // "8煤": 0xD8D8D8, // 非常浅灰色
-            "9煤": 0xffffff, // 极浅灰色
-            "煤": 0x1C1C1C, // 黑色
-            // "中砂岩": 0xD2B48C, // 棕褐色
-            // "中砾岩": 0x8B4513, // 马鞍棕色
-            // "中粒砂岩": 0xF4A460, // 沙褐色
-            // "中细砂岩": 0xCD853F, // 秘鲁色
-            // "中角砾岩": 0xA0522D, // 赭色
-            // "含砾中粒砂岩": 0xDAA520, // 金麒麟色
-            // "天然焦": 0x8B0000, // 深红色
-            // "断层破碎带": 0x696969, // 昏暗灰色
-            // "无芯": 0xA9A9A9, // 深灰色
-            // "泥岩": 0x8B4513, // 马鞍棕色
-            // "泥质灰岩": 0xC0C0C0, // 银色
-            // "泥质石灰岩": 0x778899, // 浅石板灰
-            // "泥质角砾岩": 0x708090, // 石板灰
-            // "火山角砾岩": 0x556B2F, // 深橄榄绿
-            // "火成岩": 0x8B0000, // 深红色
-            // "炭质泥岩": 0x2F4F4F, // 暗石板灰
-            // "煌斑岩": 0xB22222, // 火砖色
-            // "石灰岩": 0x808080, // 灰色
-            // "砂岩": 0xD2B48C, // 棕褐色
-            // "砂泥岩": 0xCD853F, // 秘鲁色
-            // "砂泥岩互层": 0xD2691E, // 巧克力色
-            // "砂砾": 0xF4A460, // 沙褐色
-            // "砂质泥岩": 0x8B4513, // 马鞍棕色
-            // "砂质粘土": 0xA0522D, // 赭色
-            // "破碎带": 0xA9A9A9, // 深灰色
-            // "砾石": 0xD2B48C, // 棕褐色
-            // "粉砂岩": 0xBC8F8F, // 玫瑰棕色
-            // "粗砂岩": 0xF4A460, // 沙褐色
-            // "粗粒砂岩": 0xDEB887, // 实木色
-            // "粘土": 0xD2691E, // 巧克力色
-            // "粘土岩": 0x8B4513, // 马鞍棕色
-            // "粘土页岩": 0xA0522D, // 赭色
-            // "细砂岩": 0xF5DEB3, // 小麦色
-            // "细粒砂岩": 0xCD853F, // 秘鲁色
-            // "铁质泥岩": 0x8B0000, // 深红色
-            // "铝土岩": 0xDAA520, // 金麒麟色
-            // "铝质页岩": 0xB22222, // 火砖色
-          };
 
-          holeData.forEach(drill => {
-            drill.data.forEach(layer => {
-              const xs = drill.X;
-              const ys = drill.Y;
-              const height = layer.bottom - layer.top;
-              // 更精确的坐标归一化方法
-              let normX = (xs - Math.min(...this.drillData.map(item => item[0]))) / (Math.max(...this.drillData.map(item => item[0])) - Math.min(...this.drillData.map(item => item[0]))) * 7800 - 3900;
-              let normZ = (ys - Math.min(...this.drillData.map(item => item[1]))) / (Math.max(...this.drillData.map(item => item[1])) - Math.min(...this.drillData.map(item => item[1]))) * 7800 - 3900;
-              // 调整钻孔的高度计算方法，使其基于地表以下深度
-              const geometry = new THREE.CylinderGeometry(30, 30, height * 4.5, 32);
-              const material = new THREE.MeshBasicMaterial({
-                color: colorMap[layer.name] || 0xFFFFFF,
-                transparent: true,
-                opacity: 1
-              });
-              const cylinder = new THREE.Mesh(geometry, material);
-              // 根据实际坐标调整钻孔位置
-              cylinder.position.set(normZ * 0.9, -(layer.top + height / 2) * 4.5 + 1200, normX * 0.9); // 高度的中点应该是地表下的中间位置
-              this.scene.add(cylinder);
+    async addDrillHoles() {
+      // 从 CSV 文件获取数据
+      const parsedData = await this.fetchHoleData();
+      const holeData = parsedData.reduce((acc, item) => {
+        let borehole = acc.find(b => b.id === item.id);
+        if (!borehole) {
+          borehole = {
+            id: item.id,
+            Y: item.Y,
+            X: item.X,
+            T: item.t,
+            data: []
+          };
+          acc.push(borehole);
+        }
+        borehole.data.push({ name: item.name, top: item.top, bottom: item.bottom });
+        return acc;
+      }, []);
+      const colorMap = {
+        "9煤": 0x1C1C1C, // 极浅灰色
+        // "煤": 0x1C1C1C, // 黑色
+      };
+      holeData.forEach(drill => {
+        // 加载字体
+        const loader = new FontLoader();
+
+        drill.data.forEach(layer => {
+          const xs = drill.X;
+          const ys = drill.Y;
+          const height = layer.bottom - layer.top;
+          // 更精确的坐标归一化方法
+          let normX = (xs - Math.min(...this.drillData.map(item => item[0]))) / (Math.max(...this.drillData.map(item => item[0])) - Math.min(...this.drillData.map(item => item[0]))) * 7800 - 3900;
+          let normZ = (ys - Math.min(...this.drillData.map(item => item[1]))) / (Math.max(...this.drillData.map(item => item[1])) - Math.min(...this.drillData.map(item => item[1]))) * 7800 - 3900;
+          // 调整钻孔的高度计算方法，使其基于地表以下深度
+          const geometry = new THREE.CylinderGeometry(30, 30, height * 4.5, 32);
+          const material = new THREE.MeshBasicMaterial({
+            color: colorMap[layer.name] || 0xFFFFFF,
+            transparent: true,
+            opacity: 1
+          });
+          const cylinder = new THREE.Mesh(geometry, material);
+          // 根据实际坐标调整钻孔位置
+          cylinder.position.set(normZ * 0.9, -layer.top, normX * 0.9); // 高度的中点应该是地表下的中间位置
+          this.scene.add(cylinder);
+
+
+          loader.load('/font/gentilis_regular.typeface.json', (font) => {
+            let color = new THREE.Color(0x000000);  // 文本颜色
+            if (drill.T === -1) {
+              color = 0xff0000
+            }
+            if (drill.T === 8) {
+              color = 0x0000ff
+            }
+            // 创建材质
+            const textMaterial = new THREE.MeshBasicMaterial({
+              color: color,
+              transparent: true,
+              opacity: 1,
+              side: THREE.DoubleSide
             });
-          })
-        })
+            const message = drill.id + "\nH:" + height.toFixed(2);  // 要显示的文本
+            // 生成文本的形状
+            const shapes = font.generateShapes(message, 30);
+            // 创建几何体
+            const geometry = new THREE.ShapeGeometry(shapes);
+            geometry.computeBoundingBox();
+            // 计算文本的水平居中偏移量
+            const xMid = -0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
+            // 将几何体水平居中
+            geometry.translate(xMid, 0, 0);
+            // 创建文本网格
+            const text = new THREE.Mesh(geometry, textMaterial);
+            text.position.set(normZ * 0.9 + 100, -layer.top, normX * 0.9);  // 设置文本的Z轴位置
+            this.scene.add(text); // 添加到 drillHolesGroup 而不是 scene
+          }); // 加载字体结束
+
+        });
+      })
+
+    },
+    
+    async fetchHoleData() {
+      try {
+        const response = await fetch('/csv/999.csv');
+        const data = await response.text();
+
+        const parsedData = Papa.parse(data, {
+          header: true,
+          dynamicTyping: true
+        }).data;
+        return parsedData;
+      } catch (error) {
+        console.error("Error fetching hole data:", error);
+      }
     },
 
     // 窗口大小变化事件处理函数
