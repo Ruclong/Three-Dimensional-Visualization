@@ -206,6 +206,7 @@ export default {
         });
       });
     },
+    // 标准化数据
     normalizeDatas(data) {
       data.sort((a, b) => a[2] - b[2]);
       const xs = data.map(item => item[0]);
@@ -239,7 +240,7 @@ export default {
         return [normX, y, normZ, position];
       });
     },
-
+    // 创建地形外壳
     createTopBottom(drillData, worldDepth, worldWidth) {
       let geometries = [];
       /*
@@ -263,7 +264,7 @@ export default {
       const material = new THREE.MeshStandardMaterial({
         color: 0x00ff45,
         wireframe: true,
-        opacity: 0.1
+        opacity: 1
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.y = 20
@@ -292,7 +293,7 @@ export default {
       planeGeometry.attributes.position.needsUpdate = true;
       // 创建材质
 
-      const planeMaterial = new THREE.MeshBasicMaterial({ color: 0x8b7d6b, wireframe: true, opacity: 0.1 });
+      const planeMaterial = new THREE.MeshBasicMaterial({ color: 0x8b7d6b, wireframe: true, opacity: 1 });
       // 创建网格并添加到场景
       const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
       planeMesh.position.z = -100;
@@ -302,7 +303,6 @@ export default {
 
       return geometries
     },
-
     //三次样条插值
     cubicSplineInterpolation(data, vertices) {
       const n = data.length;
@@ -387,7 +387,7 @@ export default {
       }
       return vertices
     },
-
+    //填充体
     addFilling(geometries) {
       // 创建填充材质，设置为棕色，不透明度为完全不透明
       const fillMaterial = [
@@ -435,6 +435,76 @@ export default {
         }
       }
     },
+    // 绘制侧面
+    addSideFace(holeData, minX, maxX, minY, maxY) {
+      //绘制侧面
+      // 映射数据成处理的原数据
+      const data = holeData.map(row => [row['Y'], row['X'], row['top'], row['bottom'], row['id']]);
+      // 去除空值
+      const filteredData = data.filter(row => row[0] != null || row[1] != null);
+      //取X，Y
+      const points = filteredData.map(row => [row[0], row[1]]);
+      // 使用Graham扫描算法处理后的外围点数据
+      const hull = this.grahamScan(points);
+      //还原点信息
+      const boundaryData = hull.map(point => {
+        const original = data.find(row => row[0] === point[0] && row[1] === point[1]);
+        return { 'id': original[4], 'Y': point[0], 'X': point[1], 'top': original[2], 'bottom': original[3], };
+      });
+
+      // 定义顶点位置数组和索引数组
+      const boundaryVertices = [];
+      const boundaryIndices = [];
+
+      boundaryData.forEach((v, i) => {
+        const xNorm = ((v.X - minX) / (maxX - minX) * 7800 - 3900) * 0.9;
+        const yNorm = ((v.Y - minY) / (maxY - minY) * 7800 - 3900) * 0.9;
+        boundaryVertices.push(yNorm, -v.top, xNorm);
+        boundaryVertices.push(yNorm, -v.bottom, xNorm);
+
+        const nextIndex = (i + 1) % boundaryData.length; // 下一个顶点索引
+        boundaryIndices.push(i * 2, nextIndex * 2, nextIndex * 2 + 1); // 侧面索引1
+        boundaryIndices.push(nextIndex * 2 + 1, i * 2 + 1, i * 2); // 侧面索引2
+      });
+      // 边界
+      const geometryBoundary = new THREE.BufferGeometry();
+      geometryBoundary.setAttribute('position', new THREE.Float32BufferAttribute(boundaryVertices, 3));
+      geometryBoundary.setIndex(boundaryIndices);
+      geometryBoundary.computeVertexNormals();
+      const meshBoundary = new THREE.Mesh(geometryBoundary, new THREE.MeshLambertMaterial({
+        color: 0x00ff50,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 1,
+        // wireframe: true
+      }));
+      this.scene.add(meshBoundary);
+    },
+    //计算外围点扫描算法
+    grahamScan(points) {
+      points.sort((a, b) => a[1] === b[1] ? a[0] - b[0] : a[1] - b[1]);
+      const n = points.length;
+      const lower = [];
+      for (let i = 0; i < n; i++) {
+        while (lower.length >= 2 && this.cross(lower[lower.length - 2], lower[lower.length - 1], points[i]) <= 0) {
+          lower.pop();
+        }
+        lower.push(points[i]);
+      }
+      const upper = [];
+      for (let i = n - 1; i >= 0; i--) {
+        while (upper.length >= 2 && this.cross(upper[upper.length - 2], upper[upper.length - 1], points[i]) <= 0) {
+          upper.pop();
+        }
+        upper.push(points[i]);
+      }
+      lower.pop();
+      upper.pop();
+      return lower.concat(upper);
+    },
+    cross(o, a, b) {
+      return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    },
 
     // 创建煤层
     async createCoalSeam() {
@@ -447,6 +517,8 @@ export default {
         const maxX = Math.max(...drillDataX);
         const minY = Math.min(...drillDataY);
         const maxY = Math.max(...drillDataY);
+
+        this.addSideFace(holeData, minX, maxX, minY, maxY)
 
         // 存储顶点信息
         for (let i = 0; i < holeData.length; i++) {
@@ -710,50 +782,6 @@ export default {
 </script>
 
 <style>
-/* 在你的主 CSS 文件或 Vue 组件的样式部分添加以下样式 */
-.lil-gui {
-  font-family: Arial, sans-serif;
-  font-size: 12px;
-  color: #ffffff;
-}
-
-.lil-gui .controller {
-  margin-bottom: 8px;
-}
-
-.lil-gui input[type="range"] {
-  width: 100%;
-}
-
-.lil-gui .close-button {
-  display: none;
-  /* 隐藏关闭按钮，如果不需要 */
-}
-
-.lil-gui .folder {
-  margin-bottom: 16px;
-}
-
-.lil-gui .folder>.title {
-  cursor: pointer;
-  margin-bottom: 4px;
-}
-
-.lil-gui .folder>.title:after {
-  content: "▼";
-  float: right;
-  font-size: 10px;
-  color: #bbb;
-}
-
-.lil-gui .folder.closed>.title:after {
-  content: "►";
-}
-
-.lil-gui .folder.closed>.content {
-  display: none;
-}
-
 #container {
   background-color: #bfd1e5;
   /* 设置背景颜色 */
